@@ -11,6 +11,9 @@ import { useEffect, useState } from "react";
 import { getFeaturedProducts } from "./lib/products";
 import Dashboard from "./admin/Dashboard";
 import { loginUser, isAdmin } from "./lib/auth";
+import { supabase } from "./lib/supabase";
+import Cart from "./pages/Cart";
+import Checkout from "./pages/Checkout";
 
 
 function Home() {
@@ -315,11 +318,105 @@ function Footer() {
   );
 }
 
-function Shop() {
-  return <main className="container" style={{ padding: "60px 0" }}>
-    <h1>Notre boutique</h1>
-  </main>;
+function addToCart(product) {
+  const savedCart = JSON.parse(
+    localStorage.getItem("paraelle-cart") || "[]"
+  );
+
+  const existingProduct = savedCart.find(
+    (item) => item.id === product.id
+  );
+
+  let updatedCart;
+
+  if (existingProduct) {
+    updatedCart = savedCart.map((item) =>
+      item.id === product.id
+        ? { ...item, quantity: item.quantity + 1 }
+        : item
+    );
+  } else {
+    updatedCart = [
+      ...savedCart,
+      {
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        image_url: product.image_url,
+        quantity: 1,
+      },
+    ];
+  }
+
+  localStorage.setItem(
+    "paraelle-cart",
+    JSON.stringify(updatedCart)
+  );
+window.dispatchEvent(new Event("cartUpdated"));
+  alert("Produit ajouté au panier !");
 }
+
+
+function Shop() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadProducts() {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Erreur chargement produits :", error);
+      } else {
+        setProducts(data || []);
+      }
+
+      setLoading(false);
+    }
+
+    loadProducts();
+  }, []);
+
+  if (loading) {
+    return <main className="container">Chargement des produits...</main>;
+  }
+
+  return (
+    <main className="container shop-page">
+      <h1>Notre boutique</h1>
+      <p>Découvrez notre sélection de produits.</p>
+
+      <div className="products-grid">
+        {products.map((product) => (
+          <article className="product-card" key={product.id}>
+            {product.image_url && (
+              <img src={product.image_url} alt={product.name} />
+            )}
+
+            <h3>{product.name}</h3>
+            <p>{Number(product.price).toFixed(2)} DT</p>
+
+            <button
+              onClick={() => addToCart(product)}
+              disabled={product.stock <= 0}
+            >
+              {product.stock <= 0 ? "Rupture de stock" : "Ajouter au panier"}
+            </button>
+          </article>
+        ))}
+      </div>
+
+      {products.length === 0 && (
+        <p>Aucun produit disponible pour le moment.</p>
+      )}
+    </main>
+  );
+}
+
 
 
 function Login() {
@@ -435,11 +532,7 @@ function AdminRoute() {
 }
 
 
-function Cart() {
-  return <main className="container" style={{ padding: "60px 0" }}>
-    <h1>Mon panier</h1>
-  </main>;
-}
+
 
 export default function App() {
   return (
@@ -450,6 +543,7 @@ export default function App() {
   <Route path="/shop" element={<Shop />} />
   <Route path="/login" element={<Login />} />
   <Route path="/cart" element={<Cart />} />
+  <Route path="/checkout" element={<Checkout />} />
 
   {/* Administration */}
   <Route path="/admin" element={<AdminRoute />} />
